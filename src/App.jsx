@@ -13,6 +13,8 @@ function App() {
   const [error, setError] = useState(null);
   const [searchHistory, setSearchHistory] = useState([]);
   const [isDark, setIsDark] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   useEffect(() => {
     const darkModeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -24,14 +26,35 @@ function App() {
     return () => darkModeMediaQuery.removeEventListener('change', handleChange);
   }, []);
 
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
+  const fetchSuggestions = async (query) => {
+    if (!query.trim()) {
+      setSuggestions([]);
+      return;
+    }
+
+    try {
+      const response = await fetch(`https://www.omdbapi.com/?s=${query}&apikey=4a3b711b`);
+      const data = await response.json();
+      
+      if (data.Response === 'True') {
+        setSuggestions(data.Search.slice(0, 5));
+      } else {
+        setSuggestions([]);
+      }
+    } catch (err) {
+      setSuggestions([]);
+    }
+  };
+
+  const handleSearch = async (query = searchQuery) => {
+    if (!query.trim()) return;
     
     setLoading(true);
     setError(null);
+    setShowSuggestions(false);
     
     try {
-      const response = await fetch(`https://www.omdbapi.com/?t=${searchQuery}&apikey=4a3b711b`);
+      const response = await fetch(`https://www.omdbapi.com/?t=${query}&apikey=4a3b711b`);
       const data = await response.json();
       
       if (data.Response === 'False') {
@@ -40,7 +63,7 @@ function App() {
       } else {
         setMovieData(data);
         setSearchHistory(prev => {
-          const newHistory = [searchQuery, ...prev.filter(item => item !== searchQuery)].slice(0, 5);
+          const newHistory = [query, ...prev.filter(item => item !== query)].slice(0, 5);
           return newHistory;
         });
       }
@@ -50,6 +73,19 @@ function App() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleInputChange = (e) => {
+    const value = e.target.value;
+    setSearchQuery(value);
+    fetchSuggestions(value);
+    setShowSuggestions(true);
+  };
+
+  const handleSuggestionClick = (suggestion) => {
+    setSearchQuery(suggestion.Title);
+    setShowSuggestions(false);
+    handleSearch(suggestion.Title);
   };
 
   return (
@@ -87,13 +123,49 @@ function App() {
           >
             <div className="w-full max-w-3xl mb-12">
               <div className="flex flex-col sm:flex-row gap-6 items-center justify-center">
-                <Input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Enter movie title..."
-                  className="w-full sm:w-96"
-                />
-                <Button onClick={handleSearch} disabled={loading}>
+                <div className="relative w-full sm:w-96">
+                  <Input
+                    value={searchQuery}
+                    onChange={handleInputChange}
+                    placeholder="Enter movie title..."
+                    className="w-full"
+                  />
+                  {showSuggestions && suggestions.length > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="absolute z-50 w-full mt-2 bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden"
+                    >
+                      {suggestions.map((suggestion) => (
+                        <motion.div
+                          key={suggestion.imdbID}
+                          whileHover={{ backgroundColor: 'rgba(99, 102, 241, 0.1)' }}
+                          className="px-4 py-3 cursor-pointer hover:bg-indigo-50 dark:hover:bg-gray-700 transition-colors"
+                          onClick={() => handleSuggestionClick(suggestion)}
+                        >
+                          <div className="flex items-center gap-3">
+                            {suggestion.Poster !== 'N/A' && (
+                              <img
+                                src={suggestion.Poster}
+                                alt={suggestion.Title}
+                                className="w-10 h-15 object-cover rounded"
+                              />
+                            )}
+                            <div>
+                              <p className="font-medium text-gray-900 dark:text-white">
+                                {suggestion.Title}
+                              </p>
+                              <p className="text-sm text-gray-500 dark:text-gray-400">
+                                {suggestion.Year}
+                              </p>
+                            </div>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </motion.div>
+                  )}
+                </div>
+                <Button onClick={() => handleSearch()} disabled={loading}>
                   {loading ? 'Searching...' : 'Search'}
                 </Button>
               </div>
